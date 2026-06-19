@@ -2408,7 +2408,7 @@ let state = {
   screen:'login', loginUser:'', loginPass:'', showPass:false, selectedStore:'',
   idType:'DPI', idNumber:'', outcome:null, action:null,
   prequalStep:0,
-  pqData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',gender:'',marital:'',email:'',phone:'',dept:'',muni:'',canton:'',street:'',p1:'',p2:'',p3:'',p4:'',income:'',activity:'',industry:'',income2:'',activity2:'',industry2:'',income3:'',activity3:'',industry3:'',empName:'',depSource:'',p1_2:'',p2_2:'',p3_2:'',p4_2:'',empName2:'',depSource2:'',p1_3:'',p2_3:'',p3_3:'',p4_3:'',empName3:'',depSource3:'',showSecondIncome:false,showThirdIncome:false,consentSig:false,consentTC:false},
+  pqData:{firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',gender:'',marital:'',email:'',phone:'',dept:'',muni:'',canton:'',street:'',p1:'',p2:'',p3:'',p4:'',income:'',activity:'',industry:'',income2:'',activity2:'',industry2:'',income3:'',activity3:'',industry3:'',empName:'',depSource:'',p1_2:'',p2_2:'',p3_2:'',p4_2:'',empName2:'',depSource2:'',p1_3:'',p2_3:'',p3_3:'',p4_3:'',empName3:'',depSource3:'',showSecondIncome:false,showThirdIncome:false,consentSig:false,consentTC:false},
   pqCollapsed:{1:false,2:false,3:false},
   buroConsent:false,
   otpPhone:'',otpSent:false,otpVerified:false,otpEditPhone:false,
@@ -8761,6 +8761,7 @@ function _srchRenderForm(){
       <div class="srch-field"><label>${es?'Primer apellido':'Last name'} <span class="opt" style="color:var(--danger);">*</span></label>${fieldX('srchLn', s.lnValue, '')}</div>
     </div>
     <div class="srch-form-grid full"><div class="srch-field"><label>${es?'Segundo apellido':'Second last name'} <span class="opt">· ${es?'opcional':'optional'}</span></label>${fieldX('srchLn2', s.ln2Value, '')}</div></div>
+    <div class="srch-form-grid full"><div class="srch-field"><label>${es?'Apellido de casada':'Married surname'} <span class="opt">· ${es?'opcional':'optional'}</span></label>${fieldX('srchApellidoCasada', s.apellidoCasadaValue||'', '')}</div></div>
     <div class="srch-form-grid full"><div class="srch-field"><label>${es?'Fecha de nacimiento':'Date of birth'} <span class="opt">· ${es?'opcional':'optional'}</span></label><input type="date" id="srchDob" value="${s.dobValue||''}" class="srch-input"/></div></div>`;
   }
   if(s.tab === 'account'){
@@ -8811,7 +8812,8 @@ function pgSalesCreate(){
   return`<div class="card"><div class="card-header"><h2>${t('salesCreateTitle')}</h2><p>${t('salesCreateDesc')}</p></div>
   <div class="form-row"><div class="form-group"><label class="form-label">${es?'Tipo de documento':'Document type'}</label><select class="form-select" id="scIdType"><option value="DPI" ${idT==='DPI'?'selected':''}>DPI</option><option value="Pasaporte" ${idT==='Pasaporte'?'selected':''}>${es?'Pasaporte':'Passport'}</option><option value="Residencia" ${idT==='Residencia'?'selected':''}>${es?'Residencia':'Residency'}</option></select></div><div class="form-group"><label class="form-label">${es?'Número de documento':'Document number'}</label><input class="form-input" id="scIdNumber" placeholder="${_docPlaceholder(cfg)}" value="${idN}"/><div class="form-hint" id="scIdHint" style="font-size:11px;color:var(--text-dim);margin-top:4px;">${_docHint(cfg)}</div></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">${t('pqFirstName')}</label><input class="form-input" id="scFirstName" placeholder="${t('pqFirstName')}" value="${d.firstName||''}"/></div><div class="form-group"><label class="form-label">${t('pqSecondName')}</label><input class="form-input" id="scSecondName" placeholder="${t('pqSecondName')}" value="${d.secondName||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label class="form-label">${t('pqLastName1')}</label><input class="form-input" id="scLastName1" placeholder="${t('pqLastName1')}" value="${d.lastName1||''}"/></div><div class="form-group"><label class="form-label">${t('pqLastName2')}</label><input class="form-input" id="scLastName2" placeholder="${t('pqLastName2')}" value="${d.lastName2||''}"/></div></div>
+ <div class="form-row"><div class="form-group"><label class="form-label">${t('pqLastName1')}</label><input class="form-input" id="scLastName1" placeholder="${t('pqLastName1')}" value="${d.lastName1||''}"/></div><div class="form-group"><label class="form-label">${t('pqLastName2')}</label><input class="form-input" id="scLastName2" placeholder="${t('pqLastName2')}" value="${d.lastName2||''}"/></div></div>
+  <div class="form-group"><label class="form-label">${es?'Apellido de casada':'Married surname'} <span style="font-size:10px;font-weight:500;color:var(--text-dim);">${es?'(opcional)':'(optional)'}</span></label><input class="form-input" id="scApellidoCasada" placeholder="${es?'Apellido del cónyuge':'Spouse surname'}" value="${d.apellidoCasada||''}"/></div>
   <div class="form-group"><label class="form-label">${t('dob')}</label><input class="form-input" type="date" id="scDob" value="${d.dob||''}"/></div>
   <!-- Contacto · email o teléfono (al menos uno requerido) -->
   <div class="form-row">
@@ -11885,7 +11887,7 @@ function goHome(){
   state={lang:lang,screen:'home',loginUser:user,loginPass:'',showPass:false,selectedStore:store,
     stores:stores,
     idType:'DPI',idNumber:'',outcome:null,action:null,prequalStep:0,
-    pqData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',gender:'',marital:'',email:'',phone:'',dept:'',muni:'',canton:'',street:'',p1:'',p2:'',p3:'',p4:'',income:'',activity:'',industry:'',income2:'',activity2:'',industry2:'',income3:'',activity3:'',industry3:'',empName:'',depSource:'',p1_2:'',p2_2:'',p3_2:'',p4_2:'',empName2:'',depSource2:'',p1_3:'',p2_3:'',p3_3:'',p4_3:'',empName3:'',depSource3:'',showSecondIncome:false,showThirdIncome:false,consentSig:false,consentTC:false},
+    pqData:{firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',gender:'',marital:'',email:'',phone:'',dept:'',muni:'',canton:'',street:'',p1:'',p2:'',p3:'',p4:'',income:'',activity:'',industry:'',income2:'',activity2:'',industry2:'',income3:'',activity3:'',industry3:'',empName:'',depSource:'',p1_2:'',p2_2:'',p3_2:'',p4_2:'',empName2:'',depSource2:'',p1_3:'',p2_3:'',p3_3:'',p4_3:'',empName3:'',depSource3:'',showSecondIncome:false,showThirdIncome:false,consentSig:false,consentTC:false},
     buroConsent:false,otpPhone:'',otpSent:false,otpVerified:false,otpEditPhone:false,
   // OTP fallback (v97) — escalera: SMS → email → bypass del gerente
   _otpFallbackOpen:false, _otpResendCount:0, _otpEmailSent:false, _otpEmailValue:'',
@@ -12364,7 +12366,7 @@ function bind(){
     if(state.screen==='salesCreate'){
       // H27 fix: clear the partially-filled new-customer form so a later
       // re-entry from a different search starts blank.
-      state.salesNewData={firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:'',email:'',phone:''};
+      state.salesNewData={firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:'',email:'',phone:''};
       state._dupCheck=null; state._dupOverride=false;
       state.salesScenario=null;
       state.screen=state.salesFlow?'salesIdentify':'identify';
@@ -12384,7 +12386,8 @@ function bind(){
   const scf=$('scFirstName');if(scf)scf.oninput=e=>{state.salesNewData.firstName=e.target.value;};
   const scs=$('scSecondName');if(scs)scs.oninput=e=>{state.salesNewData.secondName=e.target.value;};
   const scl1=$('scLastName1');if(scl1)scl1.oninput=e=>{state.salesNewData.lastName1=e.target.value;};
-  const scl2=$('scLastName2');if(scl2)scl2.oninput=e=>{state.salesNewData.lastName2=e.target.value;};
+ const scl2=$('scLastName2');if(scl2)scl2.oninput=e=>{state.salesNewData.lastName2=e.target.value;};
+  const scac=$('scApellidoCasada');if(scac)scac.oninput=e=>{state.salesNewData.apellidoCasada=e.target.value;};
   const scd=$('scDob');if(scd)scd.oninput=e=>{state.salesNewData.dob=e.target.value;};
   // Email + teléfono · sincronizados con pqData para que persistan a prequal/OTP
   const sce=$('scEmail');if(sce)sce.oninput=e=>{
