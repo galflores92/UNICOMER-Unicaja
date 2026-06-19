@@ -3843,6 +3843,7 @@ function pgPrequal(){
       </div>
     </div>
     <div class="form-row"><div class="form-group"><label class="form-label">${t('gender')}</label><select class="form-select" id="pqGender"><option value="">${t('sel')}</option><option value="M" ${state.pqData.gender==='M'?'selected':''}>${t('male')}</option><option value="F" ${state.pqData.gender==='F'?'selected':''}>${t('female')}</option></select></div><div class="form-group"><label class="form-label">${t('marital')}</label><select class="form-select" id="pqMarital"><option value="">${t('sel')}</option><option value="soltero" ${state.pqData.marital==='soltero'?'selected':''}>${t('single')}</option><option value="casado" ${state.pqData.marital==='casado'?'selected':''}>${t('married')}</option><option value="union" ${state.pqData.marital==='union'?'selected':''}>${t('union')}</option><option value="divorciado" ${state.pqData.marital==='divorciado'?'selected':''}>${t('divorced')}</option><option value="viudo" ${state.pqData.marital==='viudo'?'selected':''}>${t('widowed')}</option></select></div></div>
+    <div class="form-group"><label class="form-label">${es?'Apellido de casada':'Married surname'} <span style="font-size:10px;font-weight:500;color:var(--text-dim);">${es?'(opcional)':'(optional)'}</span></label><input class="form-input" id="pqApellidoCasada" placeholder="${es?'Apellido del cónyuge':'Spouse surname'}" value="${state.pqData.apellidoCasada||''}"/></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">${t('email')}</label><input class="form-input" type="email" inputmode="email" id="pqEmail" placeholder="correo@ejemplo.com" value="${state.pqData.email||''}"/></div>
       <div class="form-group">
@@ -13916,7 +13917,7 @@ function bind(){
     });
   });
   // PQ fields
-  const pf={pqFirstName:'firstName',pqSecondName:'secondName',pqLastName1:'lastName1',pqLastName2:'lastName2',pqDob:'dob',pqGender:'gender',pqMarital:'marital',pqEmail:'email',pqDept:'dept',pqMuni:'muni',pqCanton:'canton',pqStreet:'street',pqWorkDept:'workDept',pqWorkMuni:'workMuni',pqWorkCanton:'workCanton',pqWorkStreet:'workStreet'};
+  const pf={pqFirstName:'firstName',pqSecondName:'secondName',pqLastName1:'lastName1',pqLastName2:'lastName2',pqDob:'dob',pqGender:'gender',pqMarital:'marital',pqApellidoCasada:'apellidoCasada',pqEmail:'email',pqDept:'dept',pqMuni:'muni',pqCanton:'canton',pqStreet:'street',pqWorkDept:'workDept',pqWorkMuni:'workMuni',pqWorkCanton:'workCanton',pqWorkStreet:'workStreet'};
   Object.entries(pf).forEach(([id,k])=>{const el=$(id);if(el){el.addEventListener(el.tagName==='SELECT'?'change':'input',e=>state.pqData[k]=e.target.value);}});
   // Phone field: prepend +502 on change
   const pqPhEl=$('pqPhone');if(pqPhEl){pqPhEl.addEventListener('change',e=>{const v=e.target.value.trim();state.pqData.phone=v?'+502 '+v.replace(/^\+?502\s?/,''):''});pqPhEl.addEventListener('input',e=>{const v=e.target.value.trim();state.pqData.phone=v?'+502 '+v.replace(/^\+?502\s?/,''):''});}
