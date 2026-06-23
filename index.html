@@ -2803,7 +2803,7 @@ function render(){
         if(state.outcome!==null&&state.outcome!==undefined){
           // Coming from credit origination — build customer from prequal data
           const pq=state.pqData;
-          const clientName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2].filter(Boolean).join(' ')||'Cliente';
+          const clientName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2,pq.apellidoCasada].filter(Boolean).join(' ')||'Cliente';
           state.salesCustomer={name:clientName.toUpperCase(),doc:(state.idType||'DPI')+' '+(state.idNumber||''),since:new Date().getFullYear().toString()};
           if(!state.salesScenario)state.salesScenario=state.outcome===0?'existingPrequalExpress':state.outcome===1?'existingNoCredit':state.outcome===2?'existing':state.outcome===5?'existingPastDue':'new';
         } else {
@@ -2864,7 +2864,7 @@ function render(){
         state.salesCustomer.forkSociodemo=state.forkSociodemo||null;
         // Update name from prequal if available
         const pq=state.pqData;
-        const updatedName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2].filter(Boolean).join(' ');
+        const updatedName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2,pq.apellidoCasada].filter(Boolean).join(' ');
         if(updatedName)state.salesCustomer.name=updatedName.toUpperCase();
         if(state.idType&&state.idNumber)state.salesCustomer.doc=state.idType+' '+state.idNumber;
         // Land on credit tab to show the offer
@@ -3832,7 +3832,7 @@ function pgPrequal(){
   let c='';
   if(step===0){
     // Step 0: Datos Personales + Contacto (badge + 4 fields)
-    const clientName=[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2].filter(Boolean).join(' ')||'—';
+    const clientName=[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2,state.pqData.apellidoCasada].filter(Boolean).join(' ')||'—';
     const clientDoc=(state.idType||'DPI')+' '+(state.idNumber||'—');
     const initials=clientName.split(' ').filter(Boolean).map(w=>w[0]).slice(0,2).join('');
     c=`<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--surface-alt);border:1px solid var(--border);margin-bottom:20px;">
@@ -6673,6 +6673,7 @@ function pgAML(){
   const amlDisplay={
     firstName:_amlFirstName, secondName:_amlSecondName,
     lastName1:_amlLastName1, lastName2:_amlLastName2,
+    apellidoCasada:pq.apellidoCasada||'',
     gender:_amlGender, marital:_amlMarital, email:_amlEmail,
     phone:_amlPhone, dob:_amlDob,
     dept:_amlDept, muni:_amlMuni, canton:_amlCanton, street:_amlStreet,
@@ -6687,7 +6688,7 @@ function pgAML(){
   // Ensure DPI has dummy number
   if(!state.idNumber||state.idNumber==='')state.idNumber='2901 27036 2101';
 
-  const clientName=[amlDisplay.firstName,amlDisplay.secondName,amlDisplay.lastName1,amlDisplay.lastName2].filter(Boolean).join(' ')||'—';
+  const clientName=[amlDisplay.firstName,amlDisplay.secondName,amlDisplay.lastName1,amlDisplay.lastName2,amlDisplay.apellidoCasada].filter(Boolean).join(' ')||'—';
   const clientDoc=(state.idType||'DPI')+' '+(state.idNumber||'—');
   const genderLabel=amlDisplay.gender==='M'?t('male'):amlDisplay.gender==='F'?t('female'):'—';
   const maritalMap={soltero:t('single'),casado:t('married'),union:t('union'),divorciado:t('divorced'),viudo:t('widowed')};
@@ -7061,8 +7062,8 @@ function pgDocScan(){
   const _snd = state.salesNewData || {};
   const _pqd = state.pqData || {};
   const _scName = (state.salesCustomer && state.salesCustomer.name) || '';
-  const _newName = [_snd.firstName, _snd.secondName, _snd.lastName1, _snd.lastName2].filter(Boolean).join(' ');
-  const _pqName  = [_pqd.firstName, _pqd.secondName, _pqd.lastName1, _pqd.lastName2].filter(Boolean).join(' ');
+  const _newName = [_snd.firstName, _snd.secondName, _snd.lastName1, _snd.lastName2, _snd.apellidoCasada].filter(Boolean).join(' ');
+  const _pqName  = [_pqd.firstName, _pqd.secondName, _pqd.lastName1, _pqd.lastName2, _pqd.apellidoCasada].filter(Boolean).join(' ');
   const _summaryName = (_scName || _newName || _pqName || (es?'Cliente Demo':'Demo Client')).toUpperCase();
   // Extract DPI digits from salesCustomer.doc ("DPI: 2901270362101") or salesNewData.idNumber
   const _scDocRaw = (state.salesCustomer && state.salesCustomer.doc) || '';
@@ -7115,7 +7116,7 @@ function pgDocScan(){
 function pgApplication(){
   const isCash=state.action==='cash';
   const disbMethod=state.disbMethod||'';
-  const clientName = (state.salesCustomer && state.salesCustomer.name) || [state.pqData.firstName, state.pqData.secondName, state.pqData.lastName1, state.pqData.lastName2].filter(Boolean).join(' ') || '—';
+  const clientName = (state.salesCustomer && state.salesCustomer.name) || [state.pqData.firstName, state.pqData.secondName, state.pqData.lastName1, state.pqData.lastName2, state.pqData.apellidoCasada].filter(Boolean).join(' ') || '—';
 
   let disbursementSection='';
   if(isCash){
@@ -8112,7 +8113,7 @@ function pgDone(){
     const actionLabel=getProductLabel(state.action,state.outcome,(state.salesCartItems||[]).some(it=>it.category==='moto'));
     const amt=state.action==='cart'?'Q'+(state.simCartTotal||9360).toLocaleString('en',{minimumFractionDigits:2}):state.action==='cash'?'Q'+(state.simCashAmt!==undefined?state.simCashAmt:9360).toLocaleString('en',{minimumFractionDigits:2}):'—';
     const today=new Date();const dd=String(today.getDate()).padStart(2,'0'),mm=String(today.getMonth()+1).padStart(2,'0'),yy=today.getFullYear();
-    const clientName=(state.salesCustomer&&state.salesCustomer.name)||[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2].filter(Boolean).join(' ')||'—';
+    const clientName=(state.salesCustomer&&state.salesCustomer.name)||[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2,state.pqData.apellidoCasada].filter(Boolean).join(' ')||'—';
     // Build requestedIncrease snapshot if combined-increase flow was active
     const ci = state._inFlightIncrease;
     const requestedIncrease = ci ? {
@@ -11962,7 +11963,7 @@ function persistSolicitud({status,billingStatus}){
   const today=new Date();
   const dd=String(today.getDate()).padStart(2,'0'),mm=String(today.getMonth()+1).padStart(2,'0'),yy=today.getFullYear();
   const client=state.salesCustomer?state.salesCustomer.name
-    :[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2].filter(Boolean).join(' ')||'—';
+    :[state.pqData.firstName,state.pqData.secondName,state.pqData.lastName1,state.pqData.lastName2,state.pqData.apellidoCasada].filter(Boolean).join(' ')||'—';
   const doc=state.salesCustomer?state.salesCustomer.doc:((state.idType||'DPI')+' '+(state.idNumber||''));
   const phone=state.salesCustomer?.phone||state.pqData.phone||'+502 5890-1234';
   // For preapprove: no billing cycle — use 'activated' as terminal billingStatus
@@ -12593,7 +12594,7 @@ function bind(){
     d.idNumber=state.salesIdNumber; // sync de regreso al form data por consistencia
     state.idType=state.salesIdType;
     state.idNumber=state.salesIdNumber;
-    const fullName=[d.firstName,d.secondName,d.lastName1,d.lastName2].filter(Boolean).join(' ').toUpperCase();
+    const fullName=[d.firstName,d.secondName,d.lastName1,d.lastName2,d.apellidoCasada].filter(Boolean).join(' ').toUpperCase();
     // Persistir email/phone a salesCustomer y pqData para que fluyan a prequal/OTP
     const finalEmail=emVal;
     const finalPhone=phVal;
@@ -14657,7 +14658,7 @@ function bind(){
           state.salesCustomer.forkSociodemo=state.forkSociodemo||null;
           // Update name from prequal if available
           const pq=state.pqData;
-          const updatedName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2].filter(Boolean).join(' ');
+          const updatedName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2,pq.apellidoCasada].filter(Boolean).join(' ');
           if(updatedName)state.salesCustomer.name=updatedName.toUpperCase();
           if(state.idType&&state.idNumber)state.salesCustomer.doc=state.idType+' '+state.idNumber;
           state._creditFromSales=false;
