@@ -2598,6 +2598,9 @@ solicitudes:[
   ],
   // Sales flow state
   salesFlow:false,salesScenario:null,salesCustomer:null,salesTab:'cart',
+  // ── Cash & Go (4º punto de entrada — contado sin cliente identificado) ──
+  cashAndGoMode:false,        // true cuando la venta se inicia en modo Cash & Go
+  cashAndGoMaxAmount:2000,    // monto máximo parametrizable (Q)
   salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''},
   salesCartItems:[],salesIdType:'DPI',salesIdNumber:'',
   salesCotizacion:null,
@@ -2647,7 +2650,8 @@ solicitudes:[
   // - Por transacción: state.salesCartDiscount = {mode, value, totalAmount, ...} prorrateado por render
   // Ambas requieren código del gerente para AGREGAR o MODIFICAR. Remover no requiere autorización.
   salesCartDiscount:null,
-  _discountModal:null,     // {type, step:'config'|'auth', itemIdx, isEdit, newPrice, mode, percentVal, amountVal, reasonCode, codeDigits}
+  _discountModal:null,     // {type, step:'config'|'auth', itemIdx, isEdit, newPrice, mode, percentVal, amountVal, reasonCode, codeDigits,
+                           //  authLevel:0|1|2, levelCodes:[['','','','','',''],['','','','','',''],['','','','','','']], levelMaxPct:[5,15,100]}
   // Combined request: when active, the cotización being built will include a line-increase request alongside.
   // Only applies to outcome===2 (cliente con línea activa) when cuota excede CMM actual.
   // Shape: {requestedCMM, income, income2, income3, ..., docs1, docs2, docs3, ..., currentIncomes, preEvalResult, source, ...}
@@ -3411,6 +3415,14 @@ function pgHome(){
                 <div style="flex:1;">
                   <div style="font-size:14px;font-weight:700;">${t('homeSales')}</div>
                   <div style="font-size:12px;color:var(--text-dim);">${t('homeSalesDesc')}</div>
+                </div>
+                <span style="color:var(--primary);display:flex;">${icon('chevronRight',18)}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;" id="btnGoCashAndGo">
+                <div style="width:42px;height:42px;border-radius:10px;background:#FFF3E0;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#E65100;">${icon('dollarSign',20)}</div>
+                <div style="flex:1;">
+                  <div style="font-size:14px;font-weight:700;">${es?'Cash & Go':'Cash & Go'}</div>
+                  <div style="font-size:12px;color:var(--text-dim);">${es?'Venta contado sin cliente identificado':'Cash sale without customer ID'}</div>
                 </div>
                 <span style="color:var(--primary);display:flex;">${icon('chevronRight',18)}</span>
               </div>
@@ -9431,35 +9443,75 @@ function discountModal(){
           <button class="btn btn-secondary" id="btnDiscCancel" style="flex:1;justify-content:center;">${es?'Cancelar':'Cancel'}</button>
         </div>`;
   } else {
-    // step === 'auth' — el gerente ingresa su código directamente (sin envío de OTP)
-    const digits = m.codeDigits||['','','','','',''];
+    // step === 'auth' — jerarquía de 3 niveles: Vendedor → Asistente/Sub-Gerente → Gerente de Tienda
+    // authLevel: 0 = vendedor (auto-aprueba hasta levelMaxPct[0]), 1 = asistente, 2 = gerente
     const isProduct = m.type==='product';
     const summaryItem = isProduct ? (state.salesCartItems||[])[m.itemIdx] : null;
     const items = state.salesCartItems || [];
     const subtotal = getCartSubtotal(items);
-    let totalAmt = 0;
+    let totalAmt = 0, discPct = 0;
     if(isProduct){
       const preDisc = (m.isEdit && summaryItem && summaryItem.discount) ? summaryItem.discount.originalPrice : (summaryItem?summaryItem.price:0);
       totalAmt = preDisc - (parseFloat(m.newPrice)||0);
+      discPct = preDisc > 0 ? (totalAmt / preDisc) * 100 : 0;
     } else {
       totalAmt = m.mode==='percent' ? subtotal*((parseFloat(m.percentVal)||0)/100) : (parseFloat(m.amountVal)||0);
+      discPct = subtotal > 0 ? (totalAmt / subtotal) * 100 : 0;
     }
+    // Determinar nivel requerido según el % de descuento
+    const levelMaxPct = m.levelMaxPct || [5, 15, 100];
+    const levelNames_es = ['Vendedor','Asistente / Sub-Gerente','Gerente de Tienda'];
+    const levelNames_en = ['Sales Clerk','Asst. / Sub-Manager','Store Manager'];
+    const levelNames = es ? levelNames_es : levelNames_en;
+    const levelIcons = ['user','userCheck','shield'];
+    // El nivel requerido es el mínimo que cubre el % solicitado
+    let requiredLevel = 0;
+    if(discPct > levelMaxPct[1]) requiredLevel = 2;
+    else if(discPct > levelMaxPct[0]) requiredLevel = 1;
+    const currentLevel = m.authLevel !== undefined ? m.authLevel : requiredLevel;
+    const levelCodes = m.levelCodes || [[],[],[]] ;
+    const digits = levelCodes[currentLevel]||['','','','','',''];
     const codeReady = digits.join('').length===6;
-    body = `
-      <div style="margin-bottom:14px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface-alt);border:1px solid var(--border);font-size:11px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${isProduct?(es?'Descuento al artículo':'Item discount'):(es?'Descuento al carrito':'Cart discount')}</span>
-          <span style="font-family:var(--mono);font-weight:800;color:var(--danger);">−Q${totalAmt.toFixed(2)}</span>
-        </div>
-        ${isProduct?`<div style="font-size:11px;color:var(--text);margin-top:4px;">${(summaryItem||{}).name||'—'}</div>`:''}
-        <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">${m.reasonCode||'—'}</div>
+
+    // Resumen del descuento
+    const summaryBlock = `<div style="margin-bottom:14px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface-alt);border:1px solid var(--border);font-size:11px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${isProduct?(es?'Descuento al artículo':'Item discount'):(es?'Descuento al carrito':'Cart discount')}</span>
+        <span style="font-family:var(--mono);font-weight:800;color:var(--danger);">−Q${totalAmt.toFixed(2)} (${discPct.toFixed(1)}%)</span>
       </div>
-      ${renderManagerAuthBoxes({idPrefix:'discCode', digits})}
-      <div style="display:flex;gap:10px;margin-top:4px;">
-        <button class="btn btn-primary" id="btnDiscValidate" ${codeReady?'':'disabled'} style="flex:1;justify-content:center;display:inline-flex;align-items:center;gap:6px;">${icon('check',14,'white')} ${es?'Autorizar descuento':'Authorize discount'}</button>
-        <button class="btn btn-secondary" id="btnDiscCancel" style="flex:1;justify-content:center;">${es?'Cancelar':'Cancel'}</button>
-      </div>
-    `;
+      ${isProduct?`<div style="font-size:11px;color:var(--text);margin-top:4px;">${(summaryItem||{}).name||'—'}</div>`:''}
+      <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">${m.reasonCode||'—'}</div>
+    </div>`;
+
+    // Stepper visual de niveles
+    const stepperHTML = `<div style="display:flex;align-items:center;gap:4px;margin-bottom:16px;">
+      ${[0,1,2].map(lvl=>{
+        const isReq = lvl >= requiredLevel;
+        const isDone = lvl < currentLevel;
+        const isCur = lvl === currentLevel;
+        const bg = isDone ? 'var(--success)' : isCur ? 'var(--primary)' : (isReq?'var(--surface-alt)':'var(--border)');
+        const col = (isDone||isCur) ? 'white' : 'var(--text-dim)';
+        const opacity = lvl < requiredLevel ? '0.35' : '1';
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;opacity:${opacity};">
+          <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;">${isDone?icon('check',14,col):icon(levelIcons[lvl],14,col)}</div>
+          <div style="font-size:9px;font-weight:700;text-align:center;color:${isCur?'var(--primary)':'var(--text-dim)'};">${levelNames[lvl]}</div>
+          <div style="font-size:9px;color:var(--text-dim);">${es?'Hasta':'Up to'} ${levelMaxPct[lvl]}%</div>
+        </div>${lvl<2?`<div style="flex:none;width:20px;height:1.5px;background:${isDone?'var(--success)':'var(--border)'};margin-bottom:18px;"></div>`:''}`;
+      }).join('')}
+    </div>`;
+
+    // Instrucción
+    const instrBlock = `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;padding:10px 12px;background:var(--primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--primary);">
+      ${es?`<strong>${levelNames[currentLevel]}</strong> debe ingresar su código de ${currentLevel===2?'gerente':currentLevel===1?'asistente':'vendedor'} (6 dígitos).`
+          :`<strong>${levelNames[currentLevel]}</strong> must enter their ${currentLevel===2?'manager':currentLevel===1?'assistant':'clerk'} 6-digit code.`}
+    </div>`;
+
+    body = summaryBlock + stepperHTML + instrBlock
+      + renderManagerAuthBoxes({idPrefix:'discCode', digits})
+      + `<div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn btn-primary" id="btnDiscValidate" ${codeReady?'':'disabled'} style="flex:1;justify-content:center;display:inline-flex;align-items:center;gap:6px;">${icon('check',14,'white')} ${es?'Autorizar':'Authorize'}</button>
+          <button class="btn btn-secondary" id="btnDiscCancel" style="flex:1;justify-content:center;">${es?'Cancelar':'Cancel'}</button>
+        </div>`;
   }
 
   const title = m.type==='product' ? (es?'Descuento por artículo':'Item discount') : (es?'Descuento al carrito':'Cart discount');
@@ -9469,7 +9521,7 @@ function discountModal(){
         <div style="width:32px;height:32px;border-radius:50%;background:var(--primary-light);border:1px solid #C5D0F0;display:flex;align-items:center;justify-content:center;color:var(--primary);">${icon('percent',16,'var(--primary)')}</div>
         <div>
           <h3 style="font-size:16px;font-weight:800;margin:0;">${title}${m.isEdit?` · ${es?'editar':'edit'}`:''}</h3>
-          <div style="font-size:11px;color:var(--text-secondary);">${m.step==='config'?(es?'Configurá los datos del descuento':'Configure discount details'):(es?'Autorización del gerente requerida':'Manager authorization required')}</div>
+          <div style="font-size:11px;color:var(--text-secondary);">${m.step==='config'?(es?'Configurá los datos del descuento':'Configure discount details'):(es?'Jerarquía de autorización — 3 niveles':'3-level authorization hierarchy')}</div>
         </div>
       </div>
       <div style="margin-top:14px;">${body}</div>
@@ -9678,7 +9730,15 @@ function _renderPlanEntrega(){
         <div class="dl-row-cost paid">Q${fee}</div>
       </div>`;
     }).join('') : '';
+    // Banner de pre-carga desde crédito activo (si el cliente tiene dirección registrada en crédito y no tiene deliveryAddresses aún)
+    const _creditAddrBanner = (customer.registeredAddress && addrs.length===0)
+      ? `<div style="margin-bottom:10px;padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#1D4ED8;">
+           ${icon('creditCard',13,'#1D4ED8')}
+           <span>${es?'Podés usar la dirección registrada en la línea de crédito activa del cliente':'You can use the address from the customer\'s active credit line'}</span>
+         </div>`
+      : '';
     listHTML = `<div class="dl-section-l"><span>${es?'Dirección de entrega':'Delivery address'}</span></div>
+      ${_creditAddrBanner}
       ${rows?`<div class="dl-list">${rows}</div>`:''}
       <div class="dl-add" id="btnDlAddAddr">${icon('plus',14)} ${es?'Agregar nueva dirección':'Add new address'}</div>`;
   }
@@ -9781,6 +9841,11 @@ function _renderNewAddress(){
     </div>
     <div style="flex:1;padding:16px;overflow-y:auto;padding-bottom:90px;">
       <div class="inner-container" style="max-width:680px;">
+
+        ${f._preloaded?`<div style="margin-bottom:14px;padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;display:flex;align-items:center;gap:8px;font-size:12px;color:#1D4ED8;">
+          ${icon('creditCard',14,'#1D4ED8')}
+          <span>${es?'Dirección pre-cargada desde la línea de crédito activa del cliente. Podés editarla antes de confirmar.':'Address pre-loaded from customer\'s active credit line. You can edit it before confirming.'}</span>
+        </div>`:''}
 
         <div class="dl-section-l"><span>${es?'Datos de la dirección':'Address details'}</span></div>
 
@@ -10837,7 +10902,9 @@ function pgSalesCart(){
         </div>
       </div>`;
     })()}
-    <button class="btn btn-primary" id="btnSalesProceed" style="width:100%;justify-content:center;padding:12px;font-size:14px;">${t('salesProceed')}</button>`}`;
+    ${state.cashAndGoMode&&finalTotal>state.cashAndGoMaxAmount
+      ? `<div style="padding:8px 14px;background:#FFF3E0;border:1.5px solid #FFB74D;border-radius:var(--radius-sm);margin-bottom:8px;font-size:11.5px;color:#E65100;font-weight:600;display:flex;align-items:center;gap:6px;">${icon('alertTriangle',14,'#E65100')} ${state.lang==='es'?'El total (Q'+finalTotal.toFixed(2)+') supera el monto máximo permitido para Cash & Go (Q'+state.cashAndGoMaxAmount.toFixed(0)+').':'Total (Q'+finalTotal.toFixed(2)+') exceeds Cash & Go max amount (Q'+state.cashAndGoMaxAmount.toFixed(0)+').'}</div>` : ''}
+    <button class="btn btn-primary" id="btnSalesProceed" ${state.cashAndGoMode&&finalTotal>state.cashAndGoMaxAmount?'disabled':''} style="width:100%;justify-content:center;padding:12px;font-size:14px;">${t('salesProceed')}</button>`}`;
   } else if(activeTab==='credit'){
     const isExist=state.salesScenario==='existing'||state.salesScenario==='existingLegacy'||state.salesScenario==='existingLegacyPastDue'||!!customer.isLegacy||!!customer.rating;
     const hasOffer=customer.isNewCredit&&!customer.isLegacy;
@@ -11457,25 +11524,38 @@ function pgSalesCart(){
         ${activeTab==='cart'?`<span id="btnOpenSearch" style="width:36px;height:36px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--primary);">${icon('search',18)}</span>
         <span id="btnOpenScan" style="width:36px;height:36px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--primary);">${icon('barcode',18)}</span>`:''}
       </div>
-      <div class="sales-client-bar-desktop sales-client-bar-mobile" style="padding:10px 16px;border-top:1px solid var(--border);">
-        <div class="inner-container">
-          <div class="scbm-row">
-            <div class="scbm-avatar" style="width:38px;height:38px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;">${initials}</div>
-            <div class="scbm-body" style="flex:1;min-width:0;">
-              <div class="scbm-name" style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${customer.name}</div>
-              <div class="scbm-meta" style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
-                <span>${customer.doc}</span>
-                <span class="scbm-meta-badge">${creditBadge(customer)}</span>
+      ${state.cashAndGoMode
+        ? `<div style="padding:10px 16px;border-top:1px solid var(--border);background:#FFF8F0;">
+            <div class="inner-container">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:#FFF3E0;border:1.5px solid #FFB74D;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon('dollarSign',18,'#E65100')}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:13px;font-weight:800;color:#E65100;">${state.lang==='es'?'Cash & Go — Sin cliente identificado':'Cash & Go — Guest mode'}</div>
+                  <div style="font-size:11px;color:var(--text-dim);">${state.lang==='es'?'Solo contado · Monto máx: Q'+state.cashAndGoMaxAmount.toFixed(0):'Cash only · Max amount: Q'+state.cashAndGoMaxAmount.toFixed(0)}</div>
+                </div>
+                <button id="btnCashAndGoIdentify" style="font-size:11px;padding:6px 10px;border:1.5px solid var(--primary);border-radius:var(--radius-sm);background:var(--primary-light);color:var(--primary);font-weight:700;cursor:pointer;">${state.lang==='es'?'Identificar cliente':'Identify customer'}</button>
               </div>
             </div>
-            <button id="btnEditClientMobile" class="scbm-edit" title="${t('salesEditClient')}" aria-label="${t('salesEditClient')}">${icon('edit',15)}</button>
-          </div>
-          <div class="scbm-canal-row">
-            <span class="scbm-canal-lbl">${state.lang==='es'?'Canal:':'Channel:'}</span>
-            ${_renderSalesChannelPillCompact()}
-          </div>
-        </div>
-      </div>
+          </div>`
+        : `<div class="sales-client-bar-desktop sales-client-bar-mobile" style="padding:10px 16px;border-top:1px solid var(--border);">
+            <div class="inner-container">
+              <div class="scbm-row">
+                <div class="scbm-avatar" style="width:38px;height:38px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;">${initials}</div>
+                <div class="scbm-body" style="flex:1;min-width:0;">
+                  <div class="scbm-name" style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${customer.name}</div>
+                  <div class="scbm-meta" style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
+                    <span>${customer.doc}</span>
+                    <span class="scbm-meta-badge">${creditBadge(customer)}</span>
+                  </div>
+                </div>
+                <button id="btnEditClientMobile" class="scbm-edit" title="${t('salesEditClient')}" aria-label="${t('salesEditClient')}">${icon('edit',15)}</button>
+              </div>
+              <div class="scbm-canal-row">
+                <span class="scbm-canal-lbl">${state.lang==='es'?'Canal:':'Channel:'}</span>
+                ${_renderSalesChannelPillCompact()}
+              </div>
+            </div>
+          </div>`}
     </div>
     <div style="flex:1;padding:16px;overflow-y:auto;"><div class="sales-content-wrap">${content}</div></div>
     </div>
@@ -11910,6 +11990,7 @@ function goHome(){
     uploads:{address:[],income:[],idFront:false,idBack:false},
     solicitudes:sols,sales:salesData,viewingSolicitud:null,
     salesFlow:false,salesScenario:null,salesCustomer:null,salesTab:'cart',
+    cashAndGoMode:false,cashAndGoMaxAmount:2000,
     salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''},
     salesCartItems:[],salesIdType:'DPI',salesIdNumber:'',
     salesCotizacion:null,
@@ -12069,6 +12150,12 @@ function bind(){
   const gc=$('btnGoCredit');if(gc)gc.onclick=()=>{state.salesFlow=false;state.screen='identify';render();};
   // Sales flow bindings
   const gs=$('btnGoSales');if(gs)gs.onclick=()=>{state.salesFlow=true;state.screen='salesIdentify';render();};
+  // Cash & Go — 4º punto de entrada: carrito sin cliente, solo contado
+  const gcag=$('btnGoCashAndGo');if(gcag)gcag.onclick=()=>{
+    state.salesFlow=true;state.cashAndGoMode=true;state.salesCustomer=null;
+    state.salesScenario='cashAndGo';state.salesCartItems=[];state.salesCotizacion=null;
+    state.salesTab='cart';state.salesSubScreen=null;state.screen='salesCart';render();
+  };
   // Home search button → open product search standalone (no customer needed to browse)
   const bhs=$('btnHomeSearch');if(bhs)bhs.onclick=()=>{
     state.screen='salesCart';state.salesSubScreen='search';render();
@@ -12635,6 +12722,10 @@ function bind(){
   };
   // Sales cart bindings
   const shc=$('btnSalesHomeFromCart');if(shc)shc.onclick=()=>{goHome();};
+  // Cash & Go — botón "Identificar cliente" (sale del modo guest y va a búsqueda de cliente)
+  const bcagi=$('btnCashAndGoIdentify');if(bcagi)bcagi.onclick=()=>{
+    state.cashAndGoMode=false;state.screen='salesIdentify';render();
+  };
   // Edit client buttons → navigate to update client screen
   // H21: trackear origen para que el back-arrow vuelva al contexto real.
   const ecs=$('btnEditClientSidebar');if(ecs)ecs.onclick=()=>{state._editingPhone=false;state._phoneBioSent=false;state._phoneBioVerified=false;state._editingAddr=null;state._editClientOrigin=state.screen;state.screen='updateClient';render();};
@@ -13003,21 +13094,30 @@ function bind(){
     };});
     // Request: pasa de config → auth (paso único de código del gerente, sin envío OTP)
     const _dreq=$('btnDiscRequest');if(_dreq)_dreq.onclick=()=>{
+      // Inicializar jerarquía de 3 niveles
       m.step = 'auth';
-      m.codeDigits = ['','','','','',''];
+      m.authLevel = 0;          // siempre arranca en nivel 0 (vendedor)
+      m.levelCodes = [['','','','','',''],['','','','','',''],['','','','','','']];
+      m.levelMaxPct = [5, 15, 100]; // % máx por nivel — parametrizable
+      // Calcular el nivel mínimo requerido
+      const c0 = _computeDiscount(m);
+      const discPct0 = c0.discPct || 0;
+      if(discPct0 > m.levelMaxPct[1]) m.authLevel = 2;
+      else if(discPct0 > m.levelMaxPct[0]) m.authLevel = 1;
+      else m.authLevel = 0;
       render();
     };
     // Cancel: cierra modal sin aplicar
     const _dx=$('btnDiscCancel');if(_dx)_dx.onclick=()=>{ state._discountModal = null; render(); };
-    // Boxes del código del gerente (componente compartido)
+    // Boxes del código del gerente (componente compartido) — por nivel activo
     if(document.getElementById('discCode0')){
       bindManagerAuthBoxes({
         idPrefix:'discCode',
         onChange:(i,v)=>{
-          if(!m.codeDigits) m.codeDigits = ['','','','','',''];
-          m.codeDigits[i] = v;
+          if(!m.levelCodes) m.levelCodes = [['','','','','',''],['','','','','',''],['','','','','','']];
+          m.levelCodes[m.authLevel][i] = v;
           const btnV = document.getElementById('btnDiscValidate');
-          if(btnV) btnV.disabled = m.codeDigits.join('').length!==6;
+          if(btnV) btnV.disabled = m.levelCodes[m.authLevel].join('').length!==6;
         },
         onComplete:()=>{const btnV=document.getElementById('btnDiscValidate');if(btnV) btnV.disabled=false;}
       });
@@ -13026,17 +13126,21 @@ function bind(){
     const _applyDisc = ()=>{
       const c = _computeDiscount(m);
       if(!c.valid) return;
+      const authLevel = m.authLevel || 0;
+      const levelNames_es = ['Vendedor','Asistente / Sub-Gerente','Gerente de Tienda'];
       if(m.type==='product'){
         const item = state.salesCartItems[m.itemIdx];
         if(!item) return;
         item.discount = {
           type:'product',
-          inputMode: m.mode,                    // 'percent' | 'nominal' — para audit
+          inputMode: m.mode,
           originalPrice: c.preDisc,
           newPrice: c.newPrice,
           amount: c.discAmt,
           percent: c.discPct,
           reasonCode: m.reasonCode,
+          authLevel: authLevel,
+          authRole: levelNames_es[authLevel],
           authEmail: _storeManagerEmail(),
           authAt: new Date().toISOString()
         };
@@ -13048,6 +13152,8 @@ function bind(){
           value: m.mode==='percent' ? parseFloat(m.percentVal) : parseFloat(m.amountVal),
           totalAmount: c.discAmt,
           reasonCode: m.reasonCode,
+          authLevel: authLevel,
+          authRole: levelNames_es[authLevel],
           authEmail: _storeManagerEmail(),
           authAt: new Date().toISOString()
         };
@@ -13055,11 +13161,14 @@ function bind(){
       state._discountModal = null;
     };
     const _dv=$('btnDiscValidate');if(_dv)_dv.onclick=()=>{
-      const code=(m.codeDigits||[]).join('');
+      const levelCodes = m.levelCodes || [['','','','','',''],['','','','','',''],['','','','','','']];
+      const code=(levelCodes[m.authLevel]||[]).join('');
       if(!/^\d{6}$/.test(code)){
         if(typeof showToast==='function') showToast(state.lang==='es'?'El código debe ser de 6 dígitos':'Code must be 6 digits','error');
         return;
       }
+      // Si el nivel actual es suficiente (ya alcanzó el nivel requerido), aplicar
+      // En prototipo: cualquier código de 6 dígitos es válido — en prod se valida contra el servidor
       _applyDisc();render();
     };
   }
@@ -13082,7 +13191,17 @@ function bind(){
         const _d=new Date();const _yy=String(_d.getFullYear()).slice(2),_mm=String(_d.getMonth()+1).padStart(2,'0'),_dd=String(_d.getDate()).padStart(2,'0');
         state.salesCotizacion='COT-'+_yy+_mm+_dd+String(Math.floor(1+Math.random()*9999)).padStart(4,'0');
       }
-      if(warrantyOpt){cartItem.warranty={label:warrantyOpt.label,price:warrantyOpt.price};}
+      if(warrantyOpt){
+        // Garantía independiente del plazo de crédito: se guarda el plazo elegido por el cliente
+        // (puede ser 24 meses sobre un crédito de 12 meses, o cualquier combinación)
+        const warrantyMonths = parseInt((warrantyOpt.label||'').match(/\d+/)?.[0]||'0', 10);
+        cartItem.warranty={
+          label:warrantyOpt.label,
+          price:warrantyOpt.price,
+          termMonths: warrantyMonths,              // plazo de garantía elegido (independiente del crédito)
+          addedAt: new Date().toISOString()
+        };
+      }
       _applyAutoCreditPromo(cartItem, item);
       state.salesCartItems.push(cartItem);
       state._warrantyReminder=null;state.salesSubScreen=null;state.salesTab='cart';state.salesCreditDiscount=false;render();
@@ -13191,8 +13310,21 @@ function bind(){
         const def = addrs.find(a=>a.isDefault) || addrs[0];
         _consolidateFulfillment('address:'+def.id);
       } else {
-        // No hay direcciones · saltar al formulario de nueva dirección
-        state.salesAddressForm = { label:'', dept:'', muni:'', street:'', refs:'', lat:14.6064, lng:-90.5132 };
+        // No hay direcciones · pre-cargar desde crédito activo si existe, sino vacío
+        const _cust = state.salesCustomer || {};
+        const _activeCreditAddr = _cust.registeredAddress || null; // dirección registrada en línea de crédito activa
+        state.salesAddressForm = _activeCreditAddr
+          ? {
+              label:     _activeCreditAddr.label   || (state.lang==='es'?'Dirección de crédito':'Credit address'),
+              dept:      _activeCreditAddr.dept     || '',
+              muni:      _activeCreditAddr.muni     || '',
+              street:    _activeCreditAddr.street   || '',
+              refs:      _activeCreditAddr.refs     || '',
+              lat:       _activeCreditAddr.lat      || 14.6064,
+              lng:       _activeCreditAddr.lng      || -90.5132,
+              _preloaded: true   // flag para mostrar banner informativo en el form
+            }
+          : { label:'', dept:'', muni:'', street:'', refs:'', lat:14.6064, lng:-90.5132 };
         state._addAddrTargetContext = 'global';
         state.salesDeliveryStep = 'address';
       }
@@ -13215,9 +13347,16 @@ function bind(){
     render();
   };});
 
-  // Agregar nueva dirección (desde plan)
+  // Agregar nueva dirección (desde plan) — pre-carga desde crédito activo si existe
   const _bdlAddAddr=$('btnDlAddAddr'); if(_bdlAddAddr)_bdlAddAddr.onclick=()=>{
-    state.salesAddressForm = { label:'', dept:'', muni:'', street:'', refs:'', lat:14.6064, lng:-90.5132 };
+    const _c = state.salesCustomer || {};
+    const _ra = _c.registeredAddress || null;
+    state.salesAddressForm = _ra
+      ? { label: _ra.label||(state.lang==='es'?'Dirección de crédito':'Credit address'),
+          dept: _ra.dept||'', muni: _ra.muni||'', street: _ra.street||'',
+          refs: _ra.refs||'', lat: _ra.lat||14.6064, lng: _ra.lng||-90.5132,
+          _preloaded: true }
+      : { label:'', dept:'', muni:'', street:'', refs:'', lat:14.6064, lng:-90.5132 };
     state._addAddrTargetContext = 'global';
     state.salesDeliveryStep = 'address';
     render();
