@@ -11534,7 +11534,7 @@ function pgSalesCart(){
                   <div style="font-size:13px;font-weight:800;color:#E65100;">${state.lang==='es'?'Cash & Go — Sin cliente identificado':'Cash & Go — Guest mode'}</div>
                   <div style="font-size:11px;color:var(--text-dim);">${state.lang==='es'?'Solo contado · Monto máx: Q'+state.cashAndGoMaxAmount.toFixed(0):'Cash only · Max amount: Q'+state.cashAndGoMaxAmount.toFixed(0)}</div>
                 </div>
-                <button id="btnCashAndGoIdentify" style="font-size:11px;padding:6px 10px;border:1.5px solid var(--primary);border-radius:var(--radius-sm);background:var(--primary-light);color:var(--primary);font-weight:700;cursor:pointer;">${state.lang==='es'?'Identificar cliente':'Identify customer'}</button>
+                <button id="btnCashAndGoIdentify" style="font-size:11px;padding:6px 10px;border:1.5px solid var(--primary);border-radius:var(--radius-sm);background:var(--primary-light);color:var(--primary);font-weight:700;cursor:pointer;">${state.lang==='es'?'Registrar cliente':'Register customer'}</button>
               </div>
             </div>
           </div>`
@@ -12459,6 +12459,8 @@ function bind(){
       state.salesNewData={firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:'',email:'',phone:''};
       state._dupCheck=null; state._dupOverride=false;
       state.salesScenario=null;
+      // Cash & Go: back va al carrito, no a identificación
+      if(state.cashAndGoMode){state.screen='salesCart';render();return;}
       state.screen=state.salesFlow?'salesIdentify':'identify';
     }
     else if(state.screen==='salesIdentify'){state.salesFlow=false;state.screen='home';}
@@ -12723,9 +12725,9 @@ function bind(){
   };
   // Sales cart bindings
   const shc=$('btnSalesHomeFromCart');if(shc)shc.onclick=()=>{goHome();};
-  // Cash & Go — botón "Identificar cliente" (sale del modo guest y va a búsqueda de cliente)
+  // Cash & Go — botón "Registrar cliente" (permanece en Cash & Go y va directo al formulario de nuevo cliente)
   const bcagi=$('btnCashAndGoIdentify');if(bcagi)bcagi.onclick=()=>{
-    state.cashAndGoMode=false;state.screen='salesIdentify';render();
+    state.salesScenario='new';state.screen='salesCreate';render();
   };
   // Edit client buttons → navigate to update client screen
   // H21: trackear origen para que el back-arrow vuelva al contexto real.
@@ -14911,6 +14913,8 @@ function bind(){
     if(state.screen==='salesCreate'&&!state.outcome){
       bb.onclick=()=>{
         state.salesScenario=null;
+        // Cash & Go: back va al carrito, no a identificación
+        if(state.cashAndGoMode){state.screen='salesCart';render();return;}
         state.screen=state.salesFlow?'salesIdentify':'identify';
         render();
       };
