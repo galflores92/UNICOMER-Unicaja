@@ -2601,7 +2601,7 @@ solicitudes:[
   // ── Cash & Go (4º punto de entrada — contado sin cliente identificado) ──
   cashAndGoMode:false,        // true cuando la venta se inicia en modo Cash & Go
   cashAndGoMaxAmount:2000,    // monto máximo parametrizable (Q)
-  salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''},
+  salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:''},
   salesCartItems:[],salesIdType:'DPI',salesIdNumber:'',
   salesCotizacion:null,
   salesSubScreen:null,salesDetailItem:null,salesCreditDiscount:false,
@@ -2810,8 +2810,8 @@ function render(){
           const clientName=[pq.firstName,pq.secondName,pq.lastName1,pq.lastName2,pq.apellidoCasada].filter(Boolean).join(' ')||'Cliente';
           state.salesCustomer={name:clientName.toUpperCase(),doc:(state.idType||'DPI')+' '+(state.idNumber||''),since:new Date().getFullYear().toString()};
           if(!state.salesScenario)state.salesScenario=state.outcome===0?'existingPrequalExpress':state.outcome===1?'existingNoCredit':state.outcome===2?'existing':state.outcome===5?'existingPastDue':'new';
-        } else {
-          // No customer, no credit flow — redirect to identification
+        } else if(!state.cashAndGoMode) {
+          // No customer, no credit flow — redirect to identification (not Cash & Go)
           state.screen='salesIdentify';render();return;
         }
       }
@@ -8851,13 +8851,13 @@ function pgUpdateClient(){
   const c=state.salesCustomer;
   if(!c)return'';
   const nameParts=(c.name||'').split(' ').filter(Boolean);
-  // Split into 4 name parts: first name, second name, first last name, second last name
-  let n1='',n2='',a1='',a2='';
-  if(nameParts.length===4){n1=nameParts[0];n2=nameParts[1];a1=nameParts[2];a2=nameParts[3];}
+  // Split name: primer nombre · segundo nombre · primer apellido · segundo apellido · [apellido de casada]
+  let n1='',n2='',a1='',a2='',ac='';
+  if(nameParts.length>=5){n1=nameParts[0];n2=nameParts[1];a1=nameParts[2];a2=nameParts[3];ac=nameParts.slice(4).join(' ');}
+  else if(nameParts.length===4){n1=nameParts[0];n2=nameParts[1];a1=nameParts[2];a2=nameParts[3];}
   else if(nameParts.length===3){n1=nameParts[0];n2='';a1=nameParts[1];a2=nameParts[2];}
   else if(nameParts.length===2){n1=nameParts[0];n2='';a1=nameParts[1];a2='';}
-  else if(nameParts.length===1){n1=nameParts[0];} 
-  else if(nameParts.length>4){n1=nameParts[0];n2=nameParts[1];a1=nameParts.slice(2,-1).join(' ');a2=nameParts[nameParts.length-1];}
+  else if(nameParts.length===1){n1=nameParts[0];}
   const docParts=(c.doc||'').split(/[:\s]+/).filter(Boolean);
   const docType=docParts[0]||'DPI';
   const docNum=docParts.slice(1).join(' ')||'';
@@ -9123,6 +9123,7 @@ function pgUpdateClient(){
             <div class="form-group"><label class="form-label">${es?'Primer Apellido':'First Last Name'}</label><input class="form-input" value="${a1}" readonly style="background:var(--surface-alt);color:var(--text-dim);"/></div>
             <div class="form-group"><label class="form-label">${es?'Segundo Apellido':'Second Last Name'}</label><input class="form-input" value="${a2}" readonly style="background:var(--surface-alt);color:var(--text-dim);"/></div>
           </div>
+          ${ac?`<div class="form-group"><label class="form-label">${es?'Apellido de casada':'Married surname'}</label><input class="form-input" value="${ac}" readonly style="background:var(--surface-alt);color:var(--text-dim);"/></div>`:''}
           <div class="form-group" style="margin-bottom:0;"><label class="form-label">${t('dob')}</label><input class="form-input" value="${dob}" readonly style="background:var(--surface-alt);color:var(--text-dim);"/></div>
         </div>
 
@@ -11991,7 +11992,7 @@ function goHome(){
     solicitudes:sols,sales:salesData,viewingSolicitud:null,
     salesFlow:false,salesScenario:null,salesCustomer:null,salesTab:'cart',
     cashAndGoMode:false,cashAndGoMaxAmount:2000,
-    salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''},
+    salesNewData:{firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:''},
     salesCartItems:[],salesIdType:'DPI',salesIdNumber:'',
     salesCotizacion:null,
     salesSubScreen:null,salesDetailItem:null,salesCreditDiscount:false,
@@ -12365,7 +12366,7 @@ function bind(){
       // typed in the search tab, so they don't have to retype it.
       if(scenario === 'new' && state._search){
         const sv = state._search;
-        if(!state.salesNewData) state.salesNewData = {firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''};
+        if(!state.salesNewData) state.salesNewData = {firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:''};
         if(sv.tab === 'doc' && sv.docNumValue){
           state.salesNewData.idType = sv.docType || 'DPI';
           state.salesNewData.idNumber = _normDocInput(sv.docNumValue || '');
@@ -12525,7 +12526,7 @@ function bind(){
       if(!state.salesFlow) state._scenarioFromOrigination=true;
       state._search=null;
       // Reset salesNewData for next time
-      state.salesNewData={firstName:'',secondName:'',lastName1:'',lastName2:'',dob:'',idType:'DPI',idNumber:''};
+      state.salesNewData={firstName:'',secondName:'',lastName1:'',lastName2:'',apellidoCasada:'',dob:'',idType:'DPI',idNumber:''};
       navigateSalesScenario();
     };
     const ddu=$('dupUseExisting');if(ddu)ddu.onclick=()=>switchToMatched(false);
